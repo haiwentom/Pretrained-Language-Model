@@ -58,7 +58,7 @@ flags.DEFINE_string(
 ## Other parameters
 
 flags.DEFINE_string(
-    "init_checkpoint", None,
+    "init_checkpoint", "nezha/model.ckpt",
     "Initial checkpoint (usually from a pre-trained BERT model).")
 
 flags.DEFINE_bool(
@@ -703,7 +703,7 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
         if init_checkpoint:
             (assignment_map, initialized_variable_names
              ) = modeling.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
-            tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
+            ##################tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
             if use_tpu:
 
                 def tpu_scaffold():
@@ -1023,6 +1023,7 @@ def main(_):
         if FLAGS.do_train_and_eval:
             eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps, start_delay_secs=1 * 60,
                                               throttle_secs=60)  # eval_steps
+            tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
         else:
             result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
             output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
@@ -1031,8 +1032,7 @@ def main(_):
                 for key in sorted(result.keys()):
                     tf.logging.info("  %s = %s", key, str(result[key]))
                     writer.write("%s = %s\n" % (key, str(result[key])))
-    if FLAGS.do_train_and_eval:
-        tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
+                    
     if FLAGS.do_predict:
         if FLAGS.task_name.lower() == 'ner':
             token_path = os.path.join(FLAGS.output_dir, "token_test.txt")
@@ -1061,17 +1061,23 @@ def main(_):
                 seq_length=FLAGS.max_seq_length,
                 is_training=False,
                 drop_remainder=predict_drop_remainder)
-
-            result = estimator.evaluate(input_fn=predict_input_fn, checkpoint_path=FLAGS.init_checkpoint)  # predict
+            
+            #result = estimator.evaluate(input_fn=predict_input_fn, checkpoint_path=FLAGS.init_checkpoint)  # predict
+            result = estimator.predict(input_fn=predict_input_fn)  # predict
             eval_re_path = os.path.join(FLAGS.output_dir, "eval")
             if not os.path.exists(eval_re_path):
                 os.mkdir(eval_re_path)
             output_test_file = os.path.join(eval_re_path, "test_results.txt")
-            with tf.gfile.GFile(output_test_file, "w") as writer:
-                tf.logging.info("***** Test results *****")
-                for key in sorted(result.keys()):
-                    tf.logging.info("  %s = %s", key, str(result[key]))
-                    writer.write("%s = %s\n" % (key, str(result[key])))
+            with open(output_test_file,'w') as writer:
+                for prediction in result:
+                    output_line = "\n".join(id2label[id] for id in prediction if id!=0) + "\n"
+                    writer.write(output_line)            
+            
+#             with tf.gfile.GFile(output_test_file, "w") as writer:
+#                 tf.logging.info("***** Test results *****")
+#                 for key in sorted(result.keys()):
+#                     tf.logging.info("  %s = %s", key, str(result[key]))
+#                     writer.write("%s = %s\n" % (key, str(result[key])))
 
         else:
             predict_examples = processor.get_test_examples(FLAGS.data_dir)
@@ -1102,17 +1108,18 @@ def main(_):
                 is_training=False,
                 drop_remainder=predict_drop_remainder)
 
-    result = estimator.evaluate(input_fn=predict_input_fn, checkpoint_path=FLAGS.init_checkpoint)  # predict
-    output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
-    eval_re_path = os.path.join(FLAGS.output_dir, "eval")
-    if not os.path.exists(eval_re_path):
-        os.mkdir(eval_re_path)
-    output_test_file = os.path.join(eval_re_path, "test_results.txt")
-    with tf.gfile.GFile(output_test_file, "w") as writer:
-        tf.logging.info("***** Test results *****")
-        for key in sorted(result.keys()):
-            tf.logging.info("  %s = %s", key, str(result[key]))
-            writer.write("%s = %s\n" % (key, str(result[key])))
+            #result = estimator.evaluate(input_fn=predict_input_fn, checkpoint_path=FLAGS.init_checkpoint)  # predict
+            result = estimator.predict(input_fn=predict_input_fn)  # predict
+            output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
+            eval_re_path = os.path.join(FLAGS.output_dir, "eval")
+            if not os.path.exists(eval_re_path):
+                os.mkdir(eval_re_path)
+            output_test_file = os.path.join(eval_re_path, "test_results.txt")
+            with tf.gfile.GFile(output_test_file, "w") as writer:
+                tf.logging.info("***** Test results *****")
+                for key in sorted(result.keys()):
+                    tf.logging.info("  %s = %s", key, str(result[key]))
+                    writer.write("%s = %s\n" % (key, str(result[key])))
 
 
 if __name__ == "__main__":
